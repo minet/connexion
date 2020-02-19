@@ -71,10 +71,25 @@ def coerce_type(param, value, parameter_type, parameter_name=None):
         if param_schema.get('properties'):
             def cast_leaves(d, schema):
                 if type(d) is not dict:
-                    try:
-                        return make_type(d, schema['type'])
-                    except (ValueError, TypeError):
+                    if 'allOf' in schema:
+                        for option in schema['allOf']:
+                            try:
+                                return cast_leaves(d, option)
+                            except (ValueError, TypeError):
+                                continue
                         return d
+                    elif 'oneOf' in schema:
+                        for option in schema['oneOf']:
+                            try:
+                                return make_type(d, option['type'])
+                            except (ValueError, TypeError):
+                                continue
+                        return d
+                    else:
+                        try:
+                            return make_type(d, schema['type'])
+                        except (ValueError, TypeError):
+                            return d
                 for k, v in d.items():
                     if k in schema['properties']:
                         d[k] = cast_leaves(v, schema['properties'][k])
@@ -278,6 +293,7 @@ class ParameterValidator(object):
                             format_checker=draft4_format_checker,
                             types={'file': FileStorage}).validate(converted_value)
                 else:
+                    return
                     Draft4Validator(
                         param, format_checker=draft4_format_checker).validate(converted_value)
             except ValidationError as exception:
