@@ -3,6 +3,7 @@ from copy import deepcopy
 from jsonschema import Draft4Validator, RefResolver, _utils
 from jsonschema.exceptions import RefResolutionError, ValidationError  # noqa
 from jsonschema.validators import extend
+from jsonschema.compat import iteritems
 from openapi_spec_validator.handlers import UrlHandler
 
 from .utils import deep_get
@@ -99,6 +100,48 @@ def validate_readOnly(validator, ro, instance, schema):
 def validate_writeOnly(validator, wo, instance, schema):
     yield ValidationError("Property is write-only")
 
+def validate_oneOf(validator, oneOf, instance, schema):
+    if instance is None and (schema.get('x-nullable') is True or schema.get('nullable')):
+        return
+ 
+    subschemas = enumerate(oneOf)
+    all_errors = []
+    for index, subschema in subschemas:
+        errs = list(validator.descend(instance, subschema, schema_path=index))
+        if not errs:
+            first_valid = subschema
+            break
+        all_errors.extend(errs)
+    else:
+        yield ValidationError(
+            "%r is not valid under any of the given schemas" % (instance,),
+            context=all_errors,
+        )
+
+    more_valid = [s for i, s in subschemas if validator.is_valid(instance, s)]
+    if more_valid:
+        more_valid.append(first_valid)
+        reprs = ", ".join(repr(schema) for schema in more_valid)
+        yield ValidationError(
+            "%r is valid under each of %s" % (instance, reprs)
+        )
+
+def validate_properties(validator, properties, instance, schema):
+    if instance is None and (schema.get('x-nullable') is True or schema.get('nullable')):
+        return
+   
+    if not validator.is_type(instance, "object"):
+        return
+
+    for property, subschema in iteritems(properties):
+        if property in instance:
+            for error in validator.descend(
+                instance[property],
+                subschema,
+                path=property,
+                schema_path=property,
+            ):
+                yield error
 
 Draft4RequestValidator = extend(Draft4Validator, {
                                 'type': validate_type,
@@ -111,4 +154,6 @@ Draft4ResponseValidator = extend(Draft4Validator, {
                                  'enum': validate_enum,
                                  'required': validate_required,
                                  'writeOnly': validate_writeOnly,
-                                 'x-writeOnly': validate_writeOnly})
+                                 'x-writeOnly': validate_writeOnly,
+				                 'properties': validate_properties,
+                                 'oneOf': validate_oneOf})
