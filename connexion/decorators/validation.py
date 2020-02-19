@@ -293,7 +293,6 @@ class ParameterValidator(object):
                             format_checker=draft4_format_checker,
                             types={'file': FileStorage}).validate(converted_value)
                 else:
-                    return
                     Draft4Validator(
                         param, format_checker=draft4_format_checker).validate(converted_value)
             except ValidationError as exception:
