@@ -126,6 +126,13 @@ def validate_oneOf(validator, oneOf, instance, schema):
             "%r is valid under each of %s" % (instance, reprs)
         )
 
+def validate_allOf(validator, allOf, instance, schema):
+    schema = {}
+    for index, subschema in enumerate(allOf):
+        schema.update(subschema)
+        for error in validator.descend(instance, schema, schema_path=index):
+            yield error
+
 def validate_properties(validator, properties, instance, schema):
     if instance is None and (schema.get('x-nullable') is True or schema.get('nullable')):
         return
@@ -147,7 +154,9 @@ Draft4RequestValidator = extend(Draft4Validator, {
                                 'type': validate_type,
                                 'enum': validate_enum,
                                 'required': validate_required,
-                                'readOnly': validate_readOnly})
+                                'readOnly': validate_readOnly,
+                                'oneOf': validate_oneOf,
+                                'allOf': validate_allOf})
 
 Draft4ResponseValidator = extend(Draft4Validator, {
                                  'type': validate_type,
